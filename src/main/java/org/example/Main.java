@@ -10,14 +10,14 @@ import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 import org.openqa.selenium.devtools.DevTools;
 
-import java.time.Duration;
-import java.util.Base64;
-import java.util.Optional;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.io.IOException;
-import java.io.File;
-import java.io.FileOutputStream;
+import java.time.Duration;
+import java.util.*;
 
 public class Main {
     private static String lastReceivedMessage = "";
@@ -34,6 +34,30 @@ public class Main {
 
             System.out.println("Updated lastReceivedMessage: " + lastReceivedMessage);
         }
+    }
+
+    public static List<Map<String, String>> readExcelData(String filePath) throws IOException {
+        List<Map<String, String>> data = new ArrayList<>();
+
+        try (FileInputStream fis = new FileInputStream(filePath);
+             Workbook workbook = new XSSFWorkbook(fis)) {
+
+            Sheet sheet = workbook.getSheetAt(0);
+            Row headerRow = sheet.getRow(0);
+
+            for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+                Row row = sheet.getRow(i);
+                Map<String, String> rowData = new HashMap<>();
+                for (int j = 0; j < row.getLastCellNum(); j++) {
+                    Cell cell = row.getCell(j);
+                    String cellValue = cell != null ? cell.toString() : "";
+                    rowData.put(headerRow.getCell(j).toString(), cellValue);
+                }
+                data.add(rowData);
+            }
+        }
+
+        return data;
     }
 
     public static void main(String[] args) {
@@ -59,56 +83,65 @@ public class Main {
             WebElement iframe = driver.findElement(By.id("ib-iframe-messaging"));
             driver.switchTo().frame(iframe);
 
-            String promptText = new String(Files.readAllBytes(Paths.get("C:\\Users\\ivona\\qa-rba-master\\src\\main\\java\\org\\example\\prompts.txt")));
-
-            WebElement messageBox = wait.until((ExpectedConditions.visibilityOfElementLocated(By.className("ib-widget-message-input"))));
-            messageBox.click();
-            messageBox.sendKeys(promptText);
-
-            lastReceivedMessage = promptText;
-
-            WebElement sendMessage =  driver.findElement(By.cssSelector("button[data-testid='input-submit']"));
-            sendMessage.click();
-
-            String cssSelector = ".ib-widget-message-bubble.agent";
-
-            Thread.sleep(10000);
-            wait.until(ExpectedConditions.presenceOfAllElementsLocatedBy(By.cssSelector(cssSelector)));
-
-            java.util.List<WebElement> elements = driver.findElements(By.cssSelector(cssSelector));
-
-            for(WebElement elem: elements){
-                System.out.println(elem.getText());
-            }
-
-            lastReceivedMessage = elements.get(elements.size() - 1).getText().replace("R\nRBHR\n", "");
-
-            String expectedResponse = new String(Files.readAllBytes(Paths.get("C:\\Users\\ivona\\qa-rba-master\\src\\main\\java\\org\\example\\expected_results.txt")));
-
-            System.out.println("Last received message: " + lastReceivedMessage);
-            System.out.println("Expected response: " + expectedResponse);
+            List<Map<String, String>> data = readExcelData("C:\\Users\\ivona\\qa-rba-master\\resources\\TestData.xlsx");
 
             Workbook workbook = new XSSFWorkbook();
             Sheet sheet = workbook.createSheet("Test Report");
+
             Row headerRow = sheet.createRow(0);
-            headerRow.createCell(0).setCellValue("Prompt");
-            headerRow.createCell(1).setCellValue("Last received message");
-            headerRow.createCell(2).setCellValue("Result");
+            headerRow.createCell(0).setCellValue("ID");
+            headerRow.createCell(1).setCellValue("Prompt");
+            headerRow.createCell(2).setCellValue("Last received message");
+            headerRow.createCell(3).setCellValue("Result");
 
-            Row dataRow = sheet.createRow(1);
-            dataRow.createCell(0).setCellValue(promptText);
-            dataRow.createCell(1).setCellValue(lastReceivedMessage);
+            int currentRow = 1;
 
-            if(!lastReceivedMessage.trim().equals(expectedResponse.trim())) {
-                System.out.println("The received message does not match the expected result.");
-                dataRow.createCell(2).setCellValue("FAIL");
+            for (Map<String, String> row : data) {
+                String promptText = row.get("PROMPT");
 
-                File screenshot = ((TakesScreenshot) driver).getScreenshotAs(OutputType.FILE);
-                File screenshotLocation = new File("C:\\Users\\ivona\\qa-rba-master\\screenshots\\screenshot" + System.currentTimeMillis() + ".png");
-                Files.copy(screenshot.toPath(), screenshotLocation.toPath());
-            } else {
-                System.out.println("The received message matches the expected result.");
-                dataRow.createCell(2).setCellValue("PASS");
+                WebElement messageBox = wait.until((ExpectedConditions.visibilityOfElementLocated(By.className("lc-footer-message-input"))));
+                messageBox.click();
+                messageBox.sendKeys(promptText);
+
+                WebElement sendMessage =  driver.findElement(By.cssSelector("button[data-testid='input-submit']"));
+                sendMessage.click();
+
+                String cssSelector = ".ib-widget-message-bubble.agent";
+
+                Thread.sleep(10000);
+                wait.until(ExpectedConditions.presenceOfAllElementsLocatedBy(By.cssSelector(cssSelector)));
+
+                java.util.List<WebElement> elements = driver.findElements(By.cssSelector(cssSelector));
+
+                for(WebElement elem: elements){
+                    System.out.println(elem.getText());
+                }
+
+                lastReceivedMessage = elements.get(elements.size() - 1).getText().replace("R\nRBHR\n", "");
+
+                String expectedResponse = row.get("EXPECTED_RESULT");
+
+                System.out.println("Expected response: " + expectedResponse);
+
+                Row dataRow = sheet.createRow(currentRow++);
+
+                String id = row.get("ID");
+
+                dataRow.createCell(0).setCellValue(id);
+                dataRow.createCell(1).setCellValue(promptText);
+                dataRow.createCell(2).setCellValue(lastReceivedMessage);
+
+                if(!lastReceivedMessage.trim().equals(expectedResponse.trim())) {
+                    System.out.println("The received message does not match the expected result.");
+                    dataRow.createCell(3).setCellValue("FAIL");
+
+                    File screenshot = ((TakesScreenshot) driver).getScreenshotAs(OutputType.FILE);
+                    File screenshotLocation = new File("C:\\Users\\ivona\\qa-rba-master\\screenshots\\screenshot" + System.currentTimeMillis() + ".png");
+                    Files.copy(screenshot.toPath(), screenshotLocation.toPath());
+                } else {
+                    System.out.println("The received message matches the expected result.");
+                    dataRow.createCell(3).setCellValue("PASS");
+                }
             }
 
             FileOutputStream fileOut = new FileOutputStream("C:\\Users\\ivona\\qa-rba-master\\reports\\test_report_" + System.currentTimeMillis() + ".xlsx");
