@@ -20,7 +20,7 @@ import java.time.Duration;
 import java.util.*;
 
 public class Main {
-    private static String lastReceivedMessage = "";
+    private static StringBuilder lastReceivedMessage = new StringBuilder();
 
     private static void handleWebSocketFrame(WebDriver driver, Object webSocketFrameObject) {
         if (webSocketFrameObject instanceof WebSocketFrame) {
@@ -30,7 +30,7 @@ public class Main {
             String decodedPayload = new String(payload);
 
             System.out.println("Received WebSocket message: " + decodedPayload);
-            lastReceivedMessage = decodedPayload;
+            lastReceivedMessage.append(decodedPayload).append("\n");
 
             System.out.println("Updated lastReceivedMessage: " + lastReceivedMessage);
         }
@@ -60,43 +60,44 @@ public class Main {
         return data;
     }
 
-    public static void main(String[] args) {
-        WebDriver driver = new ChromeDriver();
-        DevTools devTools = ((ChromeDriver) driver).getDevTools();
-        devTools.createSession();
-        devTools.send(Network.enable(Optional.of(1000000), Optional.empty(), Optional.empty()));
+    public static void main(String[] args) throws IOException {
+        List<Map<String, String>> data = readExcelData("C:\\Users\\ivona\\qa-rba-master\\resources\\TestData.xlsx");
 
-        devTools.addListener(Network.dataReceived(), webSocketFrameReceived ->
-                handleWebSocketFrame(driver, webSocketFrameReceived));
+        Workbook workbook = new XSSFWorkbook();
+        Sheet sheet = workbook.createSheet("Test Report");
 
-        try {
-            String url = "https://www.rba.hr/korisne-informacije/rba-chatbot";
+        Row headerRow = sheet.createRow(0);
+        headerRow.createCell(0).setCellValue("ID");
+        headerRow.createCell(1).setCellValue("Prompt");
+        headerRow.createCell(2).setCellValue("Last received message");
+        headerRow.createCell(3).setCellValue("Expected Result");
+        headerRow.createCell(4).setCellValue("Result");
 
-            driver.get(url);
-            WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(20));
+        int currentRow = 1;
 
-            WebElement messagingButton = wait.until(ExpectedConditions.visibilityOfElementLocated(By.id("ib-button-messaging")));
+        for (Map<String, String> row : data) {
+            WebDriver driver = new ChromeDriver();
+            DevTools devTools = ((ChromeDriver) driver).getDevTools();
+            devTools.createSession();
+            devTools.send(Network.enable(Optional.of(1000000), Optional.empty(), Optional.empty()));
 
-            messagingButton.click();
-            WebElement agree = wait.until((ExpectedConditions.visibilityOfElementLocated((By.id(("chat-overlay-i-agree"))))));
-            agree.click();
-            WebElement iframe = driver.findElement(By.id("ib-iframe-messaging"));
-            driver.switchTo().frame(iframe);
+            devTools.addListener(Network.dataReceived(), webSocketFrameReceived ->
+                    handleWebSocketFrame(driver, webSocketFrameReceived));
 
-            List<Map<String, String>> data = readExcelData("C:\\Users\\ivona\\qa-rba-master\\resources\\TestData.xlsx");
+            try {
+                String url = "https://www.rba.hr/korisne-informacije/rba-chatbot";
 
-            Workbook workbook = new XSSFWorkbook();
-            Sheet sheet = workbook.createSheet("Test Report");
+                driver.get(url);
+                WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(20));
 
-            Row headerRow = sheet.createRow(0);
-            headerRow.createCell(0).setCellValue("ID");
-            headerRow.createCell(1).setCellValue("Prompt");
-            headerRow.createCell(2).setCellValue("Last received message");
-            headerRow.createCell(3).setCellValue("Result");
+                WebElement messagingButton = wait.until(ExpectedConditions.visibilityOfElementLocated(By.id("ib-button-messaging")));
 
-            int currentRow = 1;
+                messagingButton.click();
+                WebElement agree = wait.until((ExpectedConditions.visibilityOfElementLocated((By.id(("chat-overlay-i-agree"))))));
+                agree.click();
+                WebElement iframe = driver.findElement(By.id("ib-iframe-messaging"));
+                driver.switchTo().frame(iframe);
 
-            for (Map<String, String> row : data) {
                 String promptText = row.get("PROMPT");
 
                 WebElement messageBox = wait.until((ExpectedConditions.visibilityOfElementLocated(By.className("lc-footer-message-input"))));
@@ -115,9 +116,15 @@ public class Main {
 
                 for(WebElement elem: elements){
                     System.out.println(elem.getText());
+                    lastReceivedMessage.append(elem.getText()).append("\n");
                 }
 
-                lastReceivedMessage = elements.get(elements.size() - 1).getText().replace("R\nRBHR\n", "");
+                // Include text on buttons in the lastReceivedMessage
+                java.util.List<WebElement> buttons = driver.findElements(By.cssSelector(".ib-widget-message-bubble.agent button"));
+                for(WebElement button: buttons){
+                    System.out.println(button.getText());
+                    lastReceivedMessage.append(button.getText()).append("\n");
+                }
 
                 String expectedResponse = row.get("EXPECTED_RESULT");
 
@@ -129,36 +136,37 @@ public class Main {
 
                 dataRow.createCell(0).setCellValue(id);
                 dataRow.createCell(1).setCellValue(promptText);
-                dataRow.createCell(2).setCellValue(lastReceivedMessage);
+                dataRow.createCell(2).setCellValue(lastReceivedMessage.toString());
+                dataRow.createCell(3).setCellValue(expectedResponse);
 
-                if(!lastReceivedMessage.trim().equals(expectedResponse.trim())) {
+                if(!lastReceivedMessage.toString().trim().equals(expectedResponse.trim())) {
                     System.out.println("The received message does not match the expected result.");
-                    dataRow.createCell(3).setCellValue("FAIL");
+                    dataRow.createCell(4).setCellValue("FAIL");
 
                     File screenshot = ((TakesScreenshot) driver).getScreenshotAs(OutputType.FILE);
                     File screenshotLocation = new File("C:\\Users\\ivona\\qa-rba-master\\screenshots\\screenshot" + System.currentTimeMillis() + ".png");
                     Files.copy(screenshot.toPath(), screenshotLocation.toPath());
                 } else {
                     System.out.println("The received message matches the expected result.");
-                    dataRow.createCell(3).setCellValue("PASS");
+                    dataRow.createCell(4).setCellValue("PASS");
                 }
+                lastReceivedMessage.setLength(0); // Reset the lastReceivedMessage for the next test case
+            } catch (Exception e) {
+                e.printStackTrace();
+                File screenshot = ((TakesScreenshot) driver).getScreenshotAs(OutputType.FILE);
+                try {
+                    Files.copy(screenshot.toPath(), Paths.get("C:\\Users\\ivona\\qa-rba-master\\screenshots\\screenshot" + System.currentTimeMillis() + ".png"));
+                } catch (IOException ex) {
+                    ex.printStackTrace();
+                }
+            }  finally {
+                driver.quit();
             }
-
-            FileOutputStream fileOut = new FileOutputStream("C:\\Users\\ivona\\qa-rba-master\\reports\\test_report_" + System.currentTimeMillis() + ".xlsx");
-            workbook.write(fileOut);
-            fileOut.close();
-            workbook.close();
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            File screenshot = ((TakesScreenshot) driver).getScreenshotAs(OutputType.FILE);
-            try {
-                Files.copy(screenshot.toPath(), Paths.get("C:\\Users\\ivona\\qa-rba-master\\screenshots\\screenshot" + System.currentTimeMillis() + ".png"));
-            } catch (IOException ex) {
-                ex.printStackTrace();
-            }
-        }  finally {
-            driver.quit();
         }
+
+        FileOutputStream fileOut = new FileOutputStream("C:\\Users\\ivona\\qa-rba-master\\reports\\test_report_" + System.currentTimeMillis() + ".xlsx");
+        workbook.write(fileOut);
+        fileOut.close();
+        workbook.close();
     }
 }
