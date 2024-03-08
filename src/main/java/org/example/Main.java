@@ -3,6 +3,7 @@ package org.example;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.openqa.selenium.*;
+import org.openqa.selenium.NoSuchElementException;
 import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.devtools.v119.network.Network;
 import org.openqa.selenium.devtools.v119.network.model.WebSocketFrame;
@@ -76,8 +77,8 @@ public class Main {
         int currentRow = 1;
 
         for (Map<String, String> row : data) {
-            WebDriver driver = new ChromeDriver();
-            DevTools devTools = ((ChromeDriver) driver).getDevTools();
+            ChromeDriver driver = new ChromeDriver();
+            DevTools devTools = driver.getDevTools();
             devTools.createSession();
             devTools.send(Network.enable(Optional.of(1000000), Optional.empty(), Optional.empty()));
 
@@ -86,63 +87,67 @@ public class Main {
 
             try {
                 String url = "https://www.rba.hr/korisne-informacije/rba-chatbot";
-
                 driver.get(url);
                 WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(20));
-
                 WebElement messagingButton = wait.until(ExpectedConditions.visibilityOfElementLocated(By.id("ib-button-messaging")));
-
                 messagingButton.click();
                 WebElement agree = wait.until((ExpectedConditions.visibilityOfElementLocated((By.id(("chat-overlay-i-agree"))))));
                 agree.click();
                 WebElement iframe = driver.findElement(By.id("ib-iframe-messaging"));
                 driver.switchTo().frame(iframe);
-
                 String promptText = row.get("PROMPT");
-
                 WebElement messageBox = wait.until((ExpectedConditions.visibilityOfElementLocated(By.className("lc-footer-message-input"))));
                 messageBox.click();
                 messageBox.sendKeys(promptText);
-
                 WebElement sendMessage =  driver.findElement(By.cssSelector("button[data-testid='input-submit']"));
                 sendMessage.click();
 
-                String cssSelector = ".ib-widget-message-bubble.agent";
-
+                // Wait for all messages to be received
                 Thread.sleep(10000);
-                wait.until(ExpectedConditions.presenceOfAllElementsLocatedBy(By.cssSelector(cssSelector)));
 
-                java.util.List<WebElement> elements = driver.findElements(By.cssSelector(cssSelector));
-
-                for(WebElement elem: elements){
-                    System.out.println(elem.getText());
-                    lastReceivedMessage.append(elem.getText()).append("\n");
+                // Get all messages
+                java.util.List<WebElement> elements = driver.findElements(By.cssSelector(".ib-widget-message-bubble.agent"));
+                for (WebElement element : elements) {
+                    // Get the main message text
+                    WebElement mainMessageText = element.findElement(By.cssSelector(".ib-widget-message-text"));
+                    System.out.println("main message text: " + mainMessageText.getText());
+                    lastReceivedMessage.append(mainMessageText.getText()).append("\n");
                 }
 
-                // Include text on buttons in the lastReceivedMessage
-                java.util.List<WebElement> buttons = driver.findElements(By.cssSelector(".ib-widget-message-bubble.agent button"));
-                for(WebElement button: buttons){
-                    System.out.println(button.getText());
-                    lastReceivedMessage.append(button.getText()).append("\n");
+// Check if there is a bubble with buttons after the prompt
+                java.util.List<WebElement> buttonBubbles = driver.findElements(By.cssSelector(".ib-cta-widget-bubble"));
+                if (!buttonBubbles.isEmpty()) {
+                    for (WebElement bubble : buttonBubbles) {
+                        // Get the text above the buttons within the current bubble
+                        try {
+                            WebElement textAboveButtons = bubble.findElement(By.cssSelector(".ib-cta-widget-bubble__header-text"));
+                            System.out.println("text above buttons: " + textAboveButtons.getText());
+                            lastReceivedMessage.append(textAboveButtons.getText()).append("\n");
+                        } catch (NoSuchElementException e) {
+                            System.out.println("Element with CSS selector '.ib-cta-widget-bubble__header-text' is not present.");
+                        }
+
+                        // Get all buttons within the current bubble
+                        java.util.List<WebElement> buttons = bubble.findElements(By.cssSelector(".ib-cta-widget-button"));
+                        for(WebElement button:buttons){
+                            System.out.println("button text: " + button.getText());
+                            lastReceivedMessage.append(button.getText()).append("\n");
+                        }
+                    }
                 }
+
 
                 String expectedResponse = row.get("EXPECTED_RESULT");
-
                 System.out.println("Expected response: " + expectedResponse);
-
                 Row dataRow = sheet.createRow(currentRow++);
-
                 String id = row.get("ID");
-
                 dataRow.createCell(0).setCellValue(id);
                 dataRow.createCell(1).setCellValue(promptText);
                 dataRow.createCell(2).setCellValue(lastReceivedMessage.toString());
                 dataRow.createCell(3).setCellValue(expectedResponse);
-
                 if(!lastReceivedMessage.toString().trim().equals(expectedResponse.trim())) {
                     System.out.println("The received message does not match the expected result.");
                     dataRow.createCell(4).setCellValue("FAIL");
-
                     File screenshot = ((TakesScreenshot) driver).getScreenshotAs(OutputType.FILE);
                     File screenshotLocation = new File("C:\\Users\\ivona\\qa-rba-master\\screenshots\\screenshot" + System.currentTimeMillis() + ".png");
                     Files.copy(screenshot.toPath(), screenshotLocation.toPath());
