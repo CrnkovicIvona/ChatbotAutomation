@@ -22,6 +22,7 @@ import java.util.*;
 
 public class Main {
     private static StringBuilder lastReceivedMessage = new StringBuilder();
+    private static long lastPromptTime = 0;
 
     private static void handleWebSocketFrame(WebDriver driver, Object webSocketFrameObject) {
         if (webSocketFrameObject instanceof WebSocketFrame) {
@@ -30,10 +31,15 @@ public class Main {
             byte[] payload = Base64.getDecoder().decode(webSocketFrame.getPayloadData());
             String decodedPayload = new String(payload);
 
-            System.out.println("Received WebSocket message: " + decodedPayload);
-            lastReceivedMessage.append(decodedPayload).append("\n");
+            // Check the timestamp of the message
+            long messageTime = System.currentTimeMillis(); // This line assumes that the message time is the current time
 
-            System.out.println("Updated lastReceivedMessage: " + lastReceivedMessage);
+            // Only append the message if it was sent after the last prompt
+            if (messageTime > lastPromptTime) {
+                System.out.println("Received WebSocket message: " + decodedPayload);
+                lastReceivedMessage.append(decodedPayload).append("\n");
+                System.out.println("Updated lastReceivedMessage: " + lastReceivedMessage);
+            }
         }
     }
 
@@ -95,12 +101,19 @@ public class Main {
                 agree.click();
                 WebElement iframe = driver.findElement(By.id("ib-iframe-messaging"));
                 driver.switchTo().frame(iframe);
+
+                // Reset the lastReceivedMessage after the page loads and before entering the prompt
+                lastReceivedMessage.setLength(0);
+
                 String promptText = row.get("PROMPT");
                 WebElement messageBox = wait.until((ExpectedConditions.visibilityOfElementLocated(By.className("lc-footer-message-input"))));
                 messageBox.click();
                 messageBox.sendKeys(promptText);
                 WebElement sendMessage =  driver.findElement(By.cssSelector("button[data-testid='input-submit']"));
                 sendMessage.click();
+
+                // Record the time of the last prompt
+                lastPromptTime = System.currentTimeMillis();
 
                 // Wait for all messages to be received
                 Thread.sleep(10000);
@@ -114,7 +127,7 @@ public class Main {
                     lastReceivedMessage.append(mainMessageText.getText()).append("\n");
                 }
 
-// Check if there is a bubble with buttons after the prompt
+                // Check if there is a bubble with buttons after the prompt
                 java.util.List<WebElement> buttonBubbles = driver.findElements(By.cssSelector(".ib-cta-widget-bubble"));
                 if (!buttonBubbles.isEmpty()) {
                     for (WebElement bubble : buttonBubbles) {
@@ -136,16 +149,25 @@ public class Main {
                     }
                 }
 
+                // Remove the specified text from lastReceivedMessage
+                String unwantedText = "Dobar dan, moje ime je RBA Chatbot. Mogu Vam pružiti informacije o proizvodima koje nudi RBA.\n\nOdaberite proizvod koji Vas zanima :\nTekući račun\nKreditne kartice\nGotovinski kredit\nStambeni kredit";
+                String receivedMessage = lastReceivedMessage.toString().replace(unwantedText, "");
+
+                // Remove extra spaces and newlines
+                receivedMessage = receivedMessage.replaceAll("\\s+", " ").trim();
 
                 String expectedResponse = row.get("EXPECTED_RESULT");
+                // Remove extra spaces and newlines from the expected response as well
+                expectedResponse = expectedResponse.replaceAll("\\s+", " ").trim();
+
                 System.out.println("Expected response: " + expectedResponse);
                 Row dataRow = sheet.createRow(currentRow++);
                 String id = row.get("ID");
                 dataRow.createCell(0).setCellValue(id);
                 dataRow.createCell(1).setCellValue(promptText);
-                dataRow.createCell(2).setCellValue(lastReceivedMessage.toString());
+                dataRow.createCell(2).setCellValue(receivedMessage);
                 dataRow.createCell(3).setCellValue(expectedResponse);
-                if(!lastReceivedMessage.toString().trim().equals(expectedResponse.trim())) {
+                if(!receivedMessage.trim().equals(expectedResponse.trim())) {
                     System.out.println("The received message does not match the expected result.");
                     dataRow.createCell(4).setCellValue("FAIL");
                     File screenshot = ((TakesScreenshot) driver).getScreenshotAs(OutputType.FILE);
