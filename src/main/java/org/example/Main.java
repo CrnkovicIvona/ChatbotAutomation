@@ -24,6 +24,7 @@ public class Main {
     private static StringBuilder lastReceivedMessage = new StringBuilder();
     private static long lastPromptTime = 0;
 
+    // Method to handle WebSocket frames
     private static void handleWebSocketFrame(WebDriver driver, Object webSocketFrameObject) {
         if (webSocketFrameObject instanceof WebSocketFrame) {
             WebSocketFrame webSocketFrame = (WebSocketFrame) webSocketFrameObject;
@@ -43,6 +44,7 @@ public class Main {
         }
     }
 
+    // Method to read Excel data
     public static List<Map<String, String>> readExcelData(String filePath) throws IOException {
         List<Map<String, String>> data = new ArrayList<>();
 
@@ -167,7 +169,21 @@ public class Main {
                 dataRow.createCell(1).setCellValue(promptText);
                 dataRow.createCell(2).setCellValue(receivedMessage);
                 dataRow.createCell(3).setCellValue(expectedResponse);
-                if(!receivedMessage.trim().equals(expectedResponse.trim())) {
+
+                // Here are the messages you want to check
+                String errorMsg1 = "Nažalost, još uvijek ne razmijem vaše pitanje. Kako biste lakše došli do odgovora možete odabrati: Povratak Nazovi agenta";
+                String errorMsg2 = "Možete li ponoviti pitanje malo drugačije? Ne mogu razumjeti vaše pitanje.";
+
+                // Print the received message and the error messages for debugging
+                System.out.println("Received message: " + receivedMessage);
+                System.out.println("Error message 1: " + errorMsg1);
+                System.out.println("Error message 2: " + errorMsg2);
+
+                // Check if the received message contains one of the error messages
+                if (receivedMessage.contains(errorMsg1) || receivedMessage.contains(errorMsg2)) {
+                    System.out.println("The received message is an error message.");
+                    dataRow.createCell(4).setCellValue("ERROR");
+                } else if (!receivedMessage.trim().equals(expectedResponse.trim())) {
                     System.out.println("The received message does not match the expected result.");
                     dataRow.createCell(4).setCellValue("FAIL");
                     File screenshot = ((TakesScreenshot) driver).getScreenshotAs(OutputType.FILE);
@@ -190,7 +206,6 @@ public class Main {
                 driver.quit();
             }
         }
-
         FileOutputStream fileOut = new FileOutputStream("C:\\Users\\ivona\\qa-rba-master\\reports\\test_report_" + System.currentTimeMillis() + ".xlsx");
         workbook.write(fileOut);
         fileOut.close();
