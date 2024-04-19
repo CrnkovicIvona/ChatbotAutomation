@@ -1,5 +1,5 @@
-# Automatic Chatbot Regression Testing Script
-This project provides a highly scalable script for automated regression testing of chatbots.
+# Chatbot Automated Tester
+This project provides a highly scalable script for automated testing of chatbots.
 
 **Key Features:**
 * **Dialogue Triggering**: Triggers dialogues with the chatbot based on test cases.
