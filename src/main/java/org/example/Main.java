@@ -86,12 +86,6 @@ public class Main {
 
         for (Map<String, String> row : data) {
             ChromeDriver driver = new ChromeDriver();
-            DevTools devTools = driver.getDevTools();
-            devTools.createSession();
-            devTools.send(Network.enable(Optional.of(1000000), Optional.empty(), Optional.empty()));
-
-            devTools.addListener(Network.dataReceived(), webSocketFrameReceived ->
-                    handleWebSocketFrame(driver, webSocketFrameReceived));
 
             try {
                 String url = "https://www.rba.hr/korisne-informacije/rba-chatbot";
