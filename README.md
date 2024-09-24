@@ -34,3 +34,6 @@ This project provides a highly scalable script for automated testing of chatbots
 * Regression testing of chatbots after updates or changes.
 * Identifying inconsistencies in chatbot responses.
 * Validating chatbot behavior against predefined scenarios.
+
+## License
+This repository is licensed under the MIT License.
