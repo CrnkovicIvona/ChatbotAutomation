@@ -35,5 +35,14 @@ This project provides a highly scalable script for automated testing of chatbots
 * Identifying inconsistencies in chatbot responses.
 * Validating chatbot behavior against predefined scenarios.
 
+# Script Demo Video
+
+This repository includes a demo video that showcases the execution and capabilities of the script. The video demonstrates:
+
+- How to run the script
+- Key features and functionalities
+
+Watch the demo video to get a better understanding of how the script works and what it can do.
+
 ## License
 This repository is licensed under the MIT License.
